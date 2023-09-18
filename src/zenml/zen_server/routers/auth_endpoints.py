@@ -320,6 +320,10 @@ if server_config().auth_scheme == AuthScheme.EXTERNAL:
         # If not, create a new user. If yes, update the existing user.
         try:
             user = store.get_external_user(user_id=external_user.id)
+            logger.info(
+                f"External user with ID {external_user.id} found in ZenML "
+                f"server database. Updating user info."
+            )
 
             # Update the user information
             user = store.update_user(

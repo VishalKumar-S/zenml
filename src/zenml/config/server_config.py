@@ -123,14 +123,6 @@ class ServerConfiguration(BaseModel):
                 )
 
             # If the authentication scheme is set to `EXTERNAL`, the
-            # JWT secret key must be explicitly specified.
-            if not values.get("jwt_secret_key"):
-                raise ValueError(
-                    "The JWT secret key must be explicitly configured "
-                    "when using the EXTERNAL authentication scheme."
-                )
-
-            # If the authentication scheme is set to `EXTERNAL`, the
             # external cookie name must be specified.
             if not values.get("external_cookie_name"):
                 raise ValueError(
