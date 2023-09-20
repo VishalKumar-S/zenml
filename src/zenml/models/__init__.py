@@ -13,6 +13,16 @@
 #  permissions and limitations under the License.
 """Pydantic models for the various concepts in ZenML."""
 
+from zenml.models.api_key_models import (
+    APIKey,
+    APIKeyFilterModel,
+    APIKeyInternalResponseModel,
+    APIKeyInternalUpdateModel,
+    APIKeyRequestModel,
+    APIKeyResponseModel,
+    APIKeyRotateRequestModel,
+    APIKeyUpdateModel,
+)
 from zenml.models.artifact_models import (
     ArtifactFilterModel,
     ArtifactRequestModel,
@@ -146,6 +156,16 @@ from zenml.models.logs_models import (
     LogsResponseModel,
 )
 
+APIKeyResponseModel.update_forward_refs(
+    UserResponseModel=UserResponseModel,
+    WorkspaceResponseModel=WorkspaceResponseModel,
+)
+
+APIKeyInternalResponseModel.update_forward_refs(
+    UserResponseModel=UserResponseModel,
+    WorkspaceResponseModel=WorkspaceResponseModel,
+)
+
 ComponentResponseModel.update_forward_refs(
     UserResponseModel=UserResponseModel,
     WorkspaceResponseModel=WorkspaceResponseModel,
@@ -255,6 +275,14 @@ ServiceConnectorResponseModel.update_forward_refs(
 )
 
 __all__ = [
+    "APIKey",
+    "APIKeyFilterModel",
+    "APIKeyInternalResponseModel",
+    "APIKeyInternalUpdateModel",
+    "APIKeyRequestModel",
+    "APIKeyResponseModel",
+    "APIKeyRotateRequestModel",
+    "APIKeyUpdateModel",
     "ArtifactRequestModel",
     "ArtifactResponseModel",
     "ArtifactFilterModel",

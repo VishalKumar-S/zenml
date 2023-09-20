@@ -551,6 +551,8 @@ def status() -> None:
 
         password: The password to use for authentication.
 
+        api_key: The API key to use for authentication.
+
         verify_ssl: Either a boolean, in which case it controls whether the
             server's TLS certificate is verified, or a string, in which case it
             must be a path to a CA certificate bundle to use or the CA bundle
@@ -599,6 +601,12 @@ def status() -> None:
     type=str,
 )
 @click.option(
+    "--api-key",
+    help="The API key that is used to authenticate with a ZenML server.",
+    required=False,
+    type=str,
+)
+@click.option(
     "--workspace",
     help="The workspace to use when connecting to the ZenML server.",
     required=False,
@@ -634,6 +642,7 @@ def connect(
     url: Optional[str] = None,
     username: Optional[str] = None,
     password: Optional[str] = None,
+    api_key: Optional[str] = None,
     workspace: Optional[str] = None,
     no_verify_ssl: bool = False,
     ssl_ca_cert: Optional[str] = None,
@@ -647,6 +656,8 @@ def connect(
         username: The username that is used to authenticate with the ZenML
             server.
         password: The password that is used to authenticate with the ZenML
+            server.
+        api_key: The API key that is used to authenticate with the ZenML
             server.
         workspace: The active workspace that is used to connect to the ZenML
             server.
@@ -691,6 +702,7 @@ def connect(
         url = store_dict.get("url", url)
         username = username or store_dict.get("username")
         password = password or store_dict.get("password")
+        api_key = api_key or store_dict.get("api_key")
         verify_ssl = store_dict.get("verify_ssl", verify_ssl)
 
     elif url is None:
@@ -718,16 +730,19 @@ def connect(
     assert url is not None
 
     store_dict["url"] = url
-    if not username:
-        username = click.prompt("Username", type=str)
-    store_dict["username"] = username
-    if password is None:
-        password = click.prompt(
-            f"Password for user {username} (press ENTER for empty password)",
-            default="",
-            hide_input=True,
-        )
-    store_dict["password"] = password
+    if api_key:
+        store_dict["api_key"] = api_key
+    else:
+        if not username:
+            username = click.prompt("Username", type=str)
+        store_dict["username"] = username
+        if password is None:
+            password = click.prompt(
+                f"Password for user {username} (press ENTER for empty password)",
+                default="",
+                hide_input=True,
+            )
+        store_dict["password"] = password
 
     store_type = BaseZenStore.get_store_type(url)
     if store_type == StoreType.REST:

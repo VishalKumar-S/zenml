@@ -1535,6 +1535,7 @@ zenml hub logs
 ```
 """
 
+from zenml.cli.api_key import *  # noqa
 from zenml.cli.annotator import *  # noqa
 from zenml.cli.artifact import *  # noqa
 from zenml.cli.base import *  # noqa

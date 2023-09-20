@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, Security
 
 from zenml.constants import (
     API,
+    API_KEYS,
     CODE_REPOSITORIES,
     GET_OR_CREATE,
     PIPELINE_BUILDS,
@@ -41,6 +42,9 @@ from zenml.constants import (
 from zenml.enums import PermissionType
 from zenml.exceptions import IllegalOperationError
 from zenml.models import (
+    APIKeyFilterModel,
+    APIKeyRequestModel,
+    APIKeyResponseModel,
     CodeRepositoryFilterModel,
     CodeRepositoryRequestModel,
     CodeRepositoryResponseModel,
@@ -1142,3 +1146,78 @@ def list_service_connector_resources(
         resource_type=resource_type,
         resource_id=resource_id,
     )
+
+
+@router.get(
+    WORKSPACES + "/{workspace_name_or_id}" + API_KEYS,
+    response_model=Page[APIKeyResponseModel],
+    responses={401: error_response, 404: error_response, 422: error_response},
+)
+@handle_exceptions
+def list_workspace_api_keys(
+    workspace_name_or_id: Union[str, UUID],
+    filter_model: APIKeyFilterModel = Depends(
+        make_dependable(APIKeyFilterModel)
+    ),
+    _: AuthContext = Security(authorize, scopes=[PermissionType.WRITE]),
+) -> Page[APIKeyResponseModel]:
+    """Gets API keys defined for a specific workspace.
+
+    # noqa: DAR401
+
+    Args:
+        workspace_name_or_id: Name or ID of the workspace.
+        filter_model: Filter model used for pagination, sorting,
+            filtering
+
+    Returns:
+        All API keys within the workspace.
+    """
+    workspace = zen_store().get_workspace(workspace_name_or_id)
+    filter_model.set_scope_workspace(workspace.id)
+    return zen_store().list_api_keys(filter_model=filter_model)
+
+
+@router.post(
+    WORKSPACES + "/{workspace_name_or_id}" + API_KEYS,
+    response_model=APIKeyResponseModel,
+    responses={401: error_response, 409: error_response, 422: error_response},
+)
+@handle_exceptions
+def create_api_key(
+    workspace_name_or_id: Union[str, UUID],
+    api_key: APIKeyRequestModel,
+    auth_context: AuthContext = Security(
+        authorize, scopes=[PermissionType.WRITE]
+    ),
+) -> APIKeyResponseModel:
+    """Creates an API key.
+
+    Args:
+        workspace_name_or_id: Name or ID of the workspace.
+        api_key: API key to create.
+        auth_context: Authentication context.
+
+    Returns:
+        The created API key.
+
+    Raises:
+        IllegalOperationError: If the workspace or user specified in the
+            code repository does not match the current workspace or
+            authenticated user.
+    """
+    workspace = zen_store().get_workspace(workspace_name_or_id)
+
+    if api_key.workspace != workspace.id:
+        raise IllegalOperationError(
+            "Creating API keys outside of the workspace scope "
+            f"of this endpoint `{workspace_name_or_id}` is "
+            f"not supported."
+        )
+    if api_key.user != auth_context.user.id:
+        raise IllegalOperationError(
+            "Creating API keys for a user other than yourself "
+            "is not supported."
+        )
+
+    return zen_store().create_api_key(api_key=api_key)

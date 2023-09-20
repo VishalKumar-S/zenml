@@ -61,6 +61,7 @@ from zenml.model_registries.base_model_registry import (
     RegisteredModel,
 )
 from zenml.models import BaseFilterModel
+from zenml.models.api_key_models import APIKeyResponseModel
 from zenml.models.base_models import BaseResponseModel
 from zenml.models.filter_models import (
     BoolFilter,
@@ -269,7 +270,9 @@ def print_pydantic_models(
     if exclude_columns is None:
         exclude_columns = list()
 
+    show_active_column = True
     if active_models is None:
+        show_active_column = False
         active_models = list()
 
     def __dictify(model: T) -> Dict[str, str]:
@@ -320,16 +323,15 @@ def print_pydantic_models(
         marker = "active"
         if marker in items:
             marker = "current"
-        return (
-            {
+        if active_models is not None and show_active_column:
+            return {
                 marker: ":point_right:"
                 if any(model.id == a.id for a in active_models)
                 else "",
                 **items,
             }
-            if active_models is not None
-            else items
-        )
+
+        return items
 
     active_ids = [a.id for a in active_models]
     if isinstance(models, Page):
@@ -933,6 +935,44 @@ def pretty_print_secret(
     ]
 
     print_table(stack_dicts, title=title)
+
+
+def pretty_print_api_key(
+    api_key: APIKeyResponseModel,
+) -> None:
+    """Prints the API key attributes.
+
+    Args:
+        api_key: API key to print.
+    """
+    title_ = f"API key `{api_key.name}`"
+
+    rich_table = table.Table(
+        box=box.HEAVY_EDGE,
+        title=title_,
+        show_lines=True,
+    )
+    rich_table.add_column("PROPERTY", overflow="fold")
+    rich_table.add_column("VALUE", overflow="fold")
+    model_version_info = {
+        "NAME": api_key.name,
+        "DESCRIPTION": api_key.description,
+        "ACTIVE": str(api_key.active),
+        "CREATED": str(api_key.created),
+        "UPDATED": str(api_key.updated),
+        "LAST USED": str(api_key.last_used),
+        "LAST ROTATED": str(api_key.last_rotated),
+    }
+
+    for item in model_version_info.items():
+        rich_table.add_row(*[str(elem) for elem in item])
+
+    # capitalize entries in first column
+    rich_table.columns[0]._cells = [
+        component.upper()  # type: ignore[union-attr]
+        for component in rich_table.columns[0]._cells
+    ]
+    console.print(rich_table)
 
 
 def print_list_items(list_items: List[str], column_title: str) -> None:

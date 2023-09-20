@@ -17,6 +17,11 @@ from typing import List, Optional, Tuple, Union
 from uuid import UUID
 
 from zenml.models import (
+    APIKeyFilterModel,
+    APIKeyRequestModel,
+    APIKeyResponseModel,
+    APIKeyRotateRequestModel,
+    APIKeyUpdateModel,
     ArtifactFilterModel,
     ArtifactRequestModel,
     ArtifactResponseModel,
@@ -1673,4 +1678,98 @@ class ZenStoreInterface(ABC):
 
         Raises:
             KeyError: If no service connector type with the given ID exists.
+        """
+
+    # --------
+    # API Keys
+    # --------
+
+    @abstractmethod
+    def create_api_key(
+        self, api_key: APIKeyRequestModel
+    ) -> APIKeyResponseModel:
+        """Create a new API key.
+
+        Args:
+            api_key: The API key to create.
+
+        Returns:
+            The created API key.
+
+        Raises:
+            EntityExistsError: If an API key with the same name already exists
+                in this workspace.
+        """
+
+    @abstractmethod
+    def get_api_key(self, api_key_id: UUID) -> APIKeyResponseModel:
+        """Get an API key by its unique ID.
+
+        Args:
+            api_key_id: The ID of the API key to get.
+
+        Returns:
+            The API key with the given ID.
+
+        Raises:
+            KeyError: if the API key doesn't exist.
+        """
+
+    @abstractmethod
+    def list_api_keys(
+        self, filter_model: APIKeyFilterModel
+    ) -> Page[APIKeyResponseModel]:
+        """List all API keys matching the given filter criteria.
+
+        Args:
+            filter_model: All filter parameters including pagination
+                params
+
+        Returns:
+            A list of all API keys matching the filter criteria.
+        """
+
+    @abstractmethod
+    def update_api_key(
+        self, api_key_id: UUID, api_key_update: APIKeyUpdateModel
+    ) -> APIKeyResponseModel:
+        """Update an API key.
+
+        Args:
+            api_key_id: The ID of the API key.
+            api_key_update: The update request on the API key.
+
+        Returns:
+            The updated API key.
+
+        Raises:
+            KeyError: if the API key doesn't exist.
+        """
+
+    @abstractmethod
+    def rotate_api_key(
+        self, api_key_id: UUID, rotate_request: APIKeyRotateRequestModel
+    ) -> APIKeyResponseModel:
+        """Rotate an API key.
+
+        Args:
+            api_key_id: The ID of the API key.
+            rotate_request: The rotate request on the API key.
+
+        Returns:
+            The updated API key.
+
+        Raises:
+            KeyError: if the API key doesn't exist.
+        """
+
+    @abstractmethod
+    def delete_api_key(self, api_key_id: UUID) -> None:
+        """Delete an API key.
+
+        Args:
+            api_key_id: The ID of the API key to delete.
+
+        Raises:
+            KeyError: if the API key doesn't exist.
         """

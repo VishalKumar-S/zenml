@@ -31,6 +31,7 @@ from zenml.constants import API, HEALTH
 from zenml.enums import AuthScheme, SourceContextTypes
 from zenml.zen_server.exceptions import error_detail
 from zenml.zen_server.routers import (
+    api_keys_endpoints,
     artifacts_endpoints,
     auth_endpoints,
     code_repositories_endpoints,
@@ -216,6 +217,7 @@ app.include_router(artifacts_endpoints.router)
 app.include_router(teams_endpoints.router)
 app.include_router(users_endpoints.router)
 app.include_router(users_endpoints.current_user_router)
+app.include_router(api_keys_endpoints.router)
 
 # When the auth scheme is set to EXTERNAL, users cannot be managed via the
 # API.

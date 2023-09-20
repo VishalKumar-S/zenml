@@ -40,6 +40,8 @@ from zenml.config.secrets_store_config import SecretsStoreConfiguration
 from zenml.config.store_config import StoreConfiguration
 from zenml.constants import (
     API,
+    API_KEY_ROTATE,
+    API_KEYS,
     ARTIFACTS,
     CODE_REPOSITORIES,
     CURRENT_USER,
@@ -78,6 +80,11 @@ from zenml.exceptions import (
 from zenml.io import fileio
 from zenml.logger import get_logger
 from zenml.models import (
+    APIKeyFilterModel,
+    APIKeyRequestModel,
+    APIKeyResponseModel,
+    APIKeyRotateRequestModel,
+    APIKeyUpdateModel,
     ArtifactFilterModel,
     ArtifactRequestModel,
     ArtifactResponseModel,
@@ -192,6 +199,8 @@ class RestZenStoreConfiguration(StoreConfiguration):
             store.
         username: The username to use to connect to the Zen server.
         password: The password to use to connect to the Zen server.
+        api_token: Cached API token used to connect to the Zen server.
+        api_key: API key used to connect to the Zen server.
         verify_ssl: Either a boolean, in which case it controls whether we
             verify the server's TLS certificate, or a string, in which case it
             must be a path to a CA bundle to use or the CA bundle value itself.
@@ -206,6 +215,7 @@ class RestZenStoreConfiguration(StoreConfiguration):
     username: Optional[str] = None
     password: Optional[str] = None
     api_token: Optional[str] = None
+    api_key: Optional[str] = None
     verify_ssl: Union[bool, str] = True
     http_timeout: int = DEFAULT_HTTP_TIMEOUT
 
@@ -242,18 +252,23 @@ class RestZenStoreConfiguration(StoreConfiguration):
             values: A dictionary containing the values to be validated.
 
         Raises:
-            ValueError: If neither api_token nor username is set.
+            ValueError: If neither api_token nor username nor api_key is set.
 
         Returns:
             The values dictionary.
         """
-        # Check if the values dictionary contains either an api_token or a
-        # username as non-empty strings.
-        if values.get("api_token") or values.get("username"):
+        # Check if the values dictionary contains either an API token or a
+        # username or an API key as non-empty strings.
+        if (
+            values.get("api_token")
+            or values.get("username")
+            or values.get("api_key")
+        ):
             return values
         else:
             raise ValueError(
-                "Neither api_token nor username is set in the store config."
+                "Neither api_token nor username nor api_key is set in the "
+                "store config."
             )
 
     @validator("url")
@@ -372,7 +387,7 @@ class RestZenStoreConfiguration(StoreConfiguration):
             path.
         """
         assert isinstance(config, RestZenStoreConfiguration)
-        assert config.api_token is not None
+        assert config.api_token is not None or config.api_key is not None
         config = config.copy(exclude={"username", "password"}, deep=True)
         # Load the certificate values back into the configuration
         config.expand_certificates()
@@ -2284,6 +2299,108 @@ class RestZenStore(BaseZenStore):
                 connector_type
             )
 
+    # --------
+    # API Keys
+    # --------
+
+    def create_api_key(
+        self, api_key: APIKeyRequestModel
+    ) -> APIKeyResponseModel:
+        """Create a new API key.
+
+        Args:
+            api_key: The API key to create.
+
+        Returns:
+            The created API key.
+        """
+        return self._create_workspace_scoped_resource(
+            resource=api_key,
+            response_model=APIKeyResponseModel,
+            route=API_KEYS,
+        )
+
+    def get_api_key(self, api_key_id: UUID) -> APIKeyResponseModel:
+        """Get an API key by its unique ID.
+
+        Args:
+            api_key_id: The ID of the API key to get.
+
+        Returns:
+            The API key with the given ID.
+        """
+        return self._get_resource(
+            resource_id=api_key_id,
+            route=API_KEYS,
+            response_model=APIKeyResponseModel,
+        )
+
+    def list_api_keys(
+        self, filter_model: APIKeyFilterModel
+    ) -> Page[APIKeyResponseModel]:
+        """List all API keys matching the given filter criteria.
+
+        Args:
+            filter_model: All filter parameters including pagination
+                params
+
+        Returns:
+            A list of all API keys matching the filter criteria.
+        """
+        return self._list_paginated_resources(
+            route=API_KEYS,
+            response_model=APIKeyResponseModel,
+            filter_model=filter_model,
+        )
+
+    def update_api_key(
+        self, api_key_id: UUID, api_key_update: APIKeyUpdateModel
+    ) -> APIKeyResponseModel:
+        """Update an API key.
+
+        Args:
+            api_key_id: The ID of the API key.
+            api_key_update: The update request on the API key.
+
+        Returns:
+            The updated API key.
+        """
+        return self._update_resource(
+            resource_id=api_key_id,
+            resource_update=api_key_update,
+            response_model=APIKeyResponseModel,
+            route=API_KEYS,
+        )
+
+    def rotate_api_key(
+        self, api_key_id: UUID, rotate_request: APIKeyRotateRequestModel
+    ) -> APIKeyResponseModel:
+        """Rotate an API key.
+
+        Args:
+            api_key_id: The ID of the API key.
+            rotate_request: The rotate request on the API key.
+
+        Returns:
+            The updated API key.
+
+        Raises:
+            KeyError: if the API key doesn't exist.
+        """
+        response_body = self.put(
+            f"{API_KEYS}/{str(api_key_id)}{API_KEY_ROTATE}",
+            body=rotate_request,
+        )
+        return APIKeyResponseModel.parse_obj(response_body)
+
+    def delete_api_key(self, api_key_id: UUID) -> None:
+        """Delete an API key.
+
+        Args:
+            api_key_id: The ID of the API key to delete.
+        """
+        self._delete_resource(resource_id=api_key_id, route=API_KEYS)
+
     # =======================
     # Internal helper methods
     # =======================
@@ -2302,18 +2419,30 @@ class RestZenStore(BaseZenStore):
             # Check if the API token is already stored in the config
             if self.config.api_token:
                 self._api_token = self.config.api_token
-            # Check if the username and password are provided in the config
+            # Check if the username and password or API key are provided in the
+            # config
             elif (
                 self.config.username is not None
                 and self.config.password is not None
-            ):
+            ) or self.config.api_key is not None:
+                data: Optional[Dict[str, str]] = None
+                if (
+                    self.config.username is not None
+                    and self.config.password is not None
+                ):
+                    data = {
+                        "username": self.config.username,
+                        "password": self.config.password,
+                    }
+                elif self.config.api_key is not None:
+                    data = {
+                        "api_key": self.config.api_key,
+                    }
+
                 response = self._handle_response(
                     requests.post(
                         self.url + API + VERSION_1 + LOGIN,
-                        data={
-                            "username": self.config.username,
-                            "password": self.config.password,
-                        },
+                        data=data,
                         verify=self.config.verify_ssl,
                         timeout=self.config.http_timeout,
                     )
@@ -2330,9 +2459,9 @@ class RestZenStore(BaseZenStore):
                 self.config.api_token = self._api_token
             else:
                 raise ValueError(
-                    "No API token or username/password provided. Please "
-                    "provide either a token or a username and password in "
-                    "the ZenStore config."
+                    "No API token, username/password or API key provided. "
+                    "Please provide either a token, a username and password or "
+                    "an API key in the ZenStore config."
                 )
         return self._api_token
 
@@ -2360,7 +2489,11 @@ class RestZenStore(BaseZenStore):
         """Clear the authentication session and any cached API tokens."""
         self._session = None
         self._api_token = None
-        self.config.api_token = None
+        if (
+            self.config.username is not None
+            and self.config.password is not None
+        ) or self.config.api_key is not None:
+            self.config.api_token = None
 
     @staticmethod
     def _handle_response(response: requests.Response) -> Json:

@@ -76,6 +76,13 @@ from zenml.exceptions import (
 from zenml.io import fileio
 from zenml.logger import get_console_handler, get_logger, get_logging_level
 from zenml.models import (
+    APIKeyFilterModel,
+    APIKeyInternalResponseModel,
+    APIKeyInternalUpdateModel,
+    APIKeyRequestModel,
+    APIKeyResponseModel,
+    APIKeyRotateRequestModel,
+    APIKeyUpdateModel,
     ArtifactFilterModel,
     ArtifactRequestModel,
     ArtifactResponseModel,
@@ -182,6 +189,7 @@ from zenml.zen_stores.migrations.alembic import (
     Alembic,
 )
 from zenml.zen_stores.schemas import (
+    APIKeySchema,
     ArtifactSchema,
     BaseSchema,
     CodeReferenceSchema,
@@ -5119,6 +5127,244 @@ class SqlZenStore(BaseZenStore):
         return service_connector_registry.get_service_connector_type(
             connector_type
         )
+
+    # --------
+    # API Keys
+    # --------
+
+    def create_api_key(
+        self, api_key: APIKeyRequestModel
+    ) -> APIKeyResponseModel:
+        """Create a new API key.
+
+        Args:
+            api_key: The API key to create.
+
+        Returns:
+            The created API key.
+
+        Raises:
+            EntityExistsError: If an API key with the same name already exists
+                in this workspace.
+        """
+        with Session(self.engine) as session:
+            # Check if key with the same name already exists in this workspace
+            existing_api_key = session.exec(
+                select(APIKeySchema)
+                .where(APIKeySchema.name == api_key.name)
+                .where(APIKeySchema.workspace_id == api_key.workspace)
+            ).first()
+
+            if existing_api_key is not None:
+                raise EntityExistsError(
+                    f"Unable to register API key with name '{api_key.name}': "
+                    "Found an existing API key with the same name in the same "
+                    f"'{api_key.workspace}' workspace."
+                )
+
+            new_api_key, key_value = APIKeySchema.from_request(api_key)
+            session.add(new_api_key)
+            session.commit()
+
+            api_key_model = new_api_key.to_model()
+            api_key_model.set_key(key_value)
+            return api_key_model
+
+    def get_api_key(self, api_key_id: UUID) -> APIKeyResponseModel:
+        """Get an API key by its unique ID.
+
+        Args:
+            api_key_id: The ID of the API key to get.
+
+        Returns:
+            The API key with the given ID.
+
+        Raises:
+            KeyError: if the API key doesn't exist.
+        """
+        with Session(self.engine) as session:
+            api_key = session.exec(
+                select(APIKeySchema).where(APIKeySchema.id == api_key_id)
+            ).first()
+            if api_key is None:
+                raise KeyError(f"API key with ID {api_key_id} not found.")
+            return api_key.to_model()
+
+    def get_internal_api_key(
+        self, api_key_id: UUID
+    ) -> APIKeyInternalResponseModel:
+        """Get internal details for an API key by its unique ID.
+
+        Args:
+            api_key_id: The ID of the API key to get.
+
+        Returns:
+            The internal details for the API key with the given ID.
+
+        Raises:
+            KeyError: if the API key doesn't exist.
+        """
+        with Session(self.engine) as session:
+            api_key = session.exec(
+                select(APIKeySchema).where(APIKeySchema.id == api_key_id)
+            ).first()
+            if api_key is None:
+                raise KeyError(f"API key with ID {api_key_id} not found.")
+            return api_key.to_internal_model()
+
+    def list_api_keys(
+        self, filter_model: APIKeyFilterModel
+    ) -> Page[APIKeyResponseModel]:
+        """List all API keys matching the given filter criteria.
+
+        Args:
+            filter_model: All filter parameters including pagination
+                params
+
+        Returns:
+            A list of all API keys matching the filter criteria.
+        """
+        with Session(self.engine) as session:
+            query = select(APIKeySchema)
+            return self.filter_and_paginate(
+                session=session,
+                query=query,
+                table=APIKeySchema,
+                filter_model=filter_model,
+            )
+
+    def update_api_key(
+        self, api_key_id: UUID, api_key_update: APIKeyUpdateModel
+    ) -> APIKeyResponseModel:
+        """Update an API key.
+
+        Args:
+            api_key_id: The ID of the API key.
+            api_key_update: The update request on the API key.
+
+        Returns:
+            The updated API key.
+
+        Raises:
+            KeyError: if the API key doesn't exist.
+            EntityExistsError: if the API key update would result in a name
+                conflict with an existing API key in the same workspace.
+        """
+        with Session(self.engine) as session:
+            api_key = session.exec(
+                select(APIKeySchema).where(APIKeySchema.id == api_key_id)
+            ).first()
+
+            if not api_key:
+                raise KeyError(f"API key with ID {api_key_id} not found.")
+
+            if api_key_update.name:
+                existing_api_key = session.exec(
+                    select(APIKeySchema)
+                    .where(APIKeySchema.name == api_key_update.name)
+                    .where(APIKeySchema.workspace_id == api_key.workspace_id)
+                ).first()
+
+                if existing_api_key is not None:
+                    raise EntityExistsError(
+                        f"Unable to update API key with name "
+                        f"'{api_key_update.name}': Found an existing API key "
+                        "with the same name in the same "
+                        f"'{api_key.workspace_id}' workspace."
+                    )
+
+            api_key.update(update=api_key_update)
+            session.add(api_key)
+            session.commit()
+
+            # Refresh the Model that was just created
+            session.refresh(api_key)
+            return api_key.to_model()
+
+    def update_internal_api_key(
+        self, api_key_id: UUID, api_key_update: APIKeyInternalUpdateModel
+    ) -> APIKeyResponseModel:
+        """Update an API key with internal details.
+
+        Args:
+            api_key_id: The ID of the API key.
+            api_key_update: The update request on the API key.
+
+        Returns:
+            The updated API key.
+
+        Raises:
+            KeyError: if the API key doesn't exist.
+        """
+        with Session(self.engine) as session:
+            api_key = session.exec(
+                select(APIKeySchema).where(APIKeySchema.id == api_key_id)
+            ).first()
+
+            if not api_key:
+                raise KeyError(f"API key with ID {api_key_id} not found.")
+
+            api_key.internal_update(update=api_key_update)
+            session.add(api_key)
+            session.commit()
+
+            # Refresh the Model that was just created
+            session.refresh(api_key)
+            return api_key.to_model()
+
+    def rotate_api_key(
+        self, api_key_id: UUID, rotate_request: APIKeyRotateRequestModel
+    ) -> APIKeyResponseModel:
+        """Rotate an API key.
+
+        Args:
+            api_key_id: The ID of the API key.
+            rotate_request: The rotate request on the API key.
+
+        Returns:
+            The updated API key.
+
+        Raises:
+            KeyError: if the API key doesn't exist.
+        """
+        with Session(self.engine) as session:
+            api_key = session.exec(
+                select(APIKeySchema).where(APIKeySchema.id == api_key_id)
+            ).first()
+
+            if not api_key:
+                raise KeyError(f"API key with ID {api_key_id} not found.")
+
+            _, new_key = api_key.rotate(rotate_request)
+            session.add(api_key)
+            session.commit()
+
+            # Refresh the Model that was just created
+            session.refresh(api_key)
+            api_key_model = api_key.to_model()
+            api_key_model.set_key(new_key)
+
+            return api_key_model
+
+    def delete_api_key(self, api_key_id: UUID) -> None:
+        """Delete an API key.
+
+        Args:
+            api_key_id: The ID of the API key to delete.
+
+        Raises:
+            KeyError: if the API key doesn't exist.
+        """
+        with Session(self.engine) as session:
+            api_key = session.exec(
+                select(APIKeySchema).where(APIKeySchema.id == api_key_id)
+            ).first()
+
+            if api_key is None:
+                raise KeyError(f"API key with ID {api_key_id} not " "found.")
+
+            session.delete(api_key)
+            session.commit()
 
     # =======================
     # Internal helper methods

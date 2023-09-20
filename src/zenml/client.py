@@ -69,6 +69,11 @@ from zenml.exceptions import (
 from zenml.io import fileio
 from zenml.logger import get_logger
 from zenml.models import (
+    APIKeyFilterModel,
+    APIKeyRequestModel,
+    APIKeyResponseModel,
+    APIKeyRotateRequestModel,
+    APIKeyUpdateModel,
     CodeRepositoryFilterModel,
     CodeRepositoryRequestModel,
     CodeRepositoryResponseModel,
@@ -699,6 +704,7 @@ class Client(metaclass=ClientMetaClass):
         size: int = PAGE_SIZE_DEFAULT,
         logical_operator: LogicalOperators = LogicalOperators.AND,
         id: Optional[Union[UUID, str]] = None,
+        external_user_id: Optional[Union[UUID, str]] = None,
         created: Optional[Union[datetime, str]] = None,
         updated: Optional[Union[datetime, str]] = None,
         name: Optional[str] = None,
@@ -715,6 +721,7 @@ class Client(metaclass=ClientMetaClass):
             size: The maximum size of all pages
             logical_operator: Which logical operator to use [and, or]
             id: Use the id of stacks to filter by.
+            external_user_id: Use the external user id for filtering.
             created: Use to filter by time of creation
             updated: Use the last updated date for filtering
             name: Use the username for filtering
@@ -733,6 +740,7 @@ class Client(metaclass=ClientMetaClass):
                 size=size,
                 logical_operator=logical_operator,
                 id=id,
+                external_user_id=external_user_id,
                 created=created,
                 updated=updated,
                 name=name,
@@ -4957,6 +4965,174 @@ class Client(metaclass=ClientMetaClass):
         return self.zen_store.get_service_connector_type(
             connector_type=connector_type,
         )
+
+    # .----------.
+    # | API KEYS |
+    # '----------'
+
+    def create_api_key(
+        self,
+        name: str,
+        description: str = "",
+    ) -> APIKeyResponseModel:
+        """Create a new API key.
+
+        Args:
+            name: Name of the API key.
+            description: The description of the API key.
+
+        Returns:
+            The created API key.
+        """
+        request = APIKeyRequestModel(
+            name=name,
+            description=description,
+            user=self.active_user.id,
+            workspace=self.active_workspace.id,
+        )
+        return self.zen_store.create_api_key(api_key=request)
+
+    def list_api_keys(
+        self,
+        sort_by: str = "created",
+        page: int = PAGINATION_STARTING_PAGE,
+        size: int = PAGE_SIZE_DEFAULT,
+        logical_operator: LogicalOperators = LogicalOperators.AND,
+        id: Optional[Union[UUID, str]] = None,
+        created: Optional[Union[datetime, str]] = None,
+        updated: Optional[Union[datetime, str]] = None,
+        name: Optional[str] = None,
+        active: Optional[bool] = None,
+        last_used: Optional[Union[datetime, str]] = None,
+        last_rotated: Optional[Union[datetime, str]] = None,
+        workspace_id: Optional[Union[str, UUID]] = None,
+        user_id: Optional[Union[str, UUID]] = None,
+    ) -> Page[APIKeyResponseModel]:
+        """List all API keys.
+
+        Args:
+            sort_by: The column to sort by.
+            page: The page of items.
+            size: The maximum size of all pages.
+            logical_operator: Which logical operator to use [and, or].
+            id: Use the id of the API key to filter by.
+            created: Use to filter by time of creation.
+            updated: Use the last updated date for filtering.
+            name: The name of the API key to filter by.
+            active: Whether the API key is active or not.
+            last_used: The last time the API key was used.
+            last_rotated: The last time the API key was rotated.
+            workspace_id: The id of the workspace to filter by.
+            user_id: The id of the user to filter by.
+
+        Returns:
+            A page of API keys matching the filter description.
+        """
+        filter_model = APIKeyFilterModel(
+            sort_by=sort_by,
+            page=page,
+            size=size,
+            logical_operator=logical_operator,
+            id=id,
+            created=created,
+            updated=updated,
+            name=name,
+            active=active,
+            last_used=last_used,
+            last_rotated=last_rotated,
+            workspace_id=workspace_id,
+            user_id=user_id,
+        )
+        filter_model.set_scope_workspace(self.active_workspace.id)
+        return self.zen_store.list_api_keys(filter_model=filter_model)
+
+    def get_api_key(
+        self,
+        name_id_or_prefix: Union[str, UUID],
+        allow_name_prefix_match: bool = True,
+    ) -> APIKeyResponseModel:
+        """Get an API key by name, id or prefix.
+
+        Args:
+            name_id_or_prefix: The name, ID or ID prefix of the API key.
+            allow_name_prefix_match: If True, allow matching by name prefix.
+
+        Returns:
+            The API key.
+        """
+        return self._get_entity_by_id_or_name_or_prefix(
+            get_method=self.zen_store.get_api_key,
+            list_method=self.list_api_keys,
+            name_id_or_prefix=name_id_or_prefix,
+            allow_name_prefix_match=allow_name_prefix_match,
+        )
+
+    def update_api_key(
+        self,
+        name_id_or_prefix: Union[UUID, str],
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        active: Optional[bool] = None,
+    ) -> APIKeyResponseModel:
+        """Update an API key.
+
+        Args:
+            name_id_or_prefix: Name, ID or prefix of the API key to update.
+            name: New name of the API key.
+            description: New description of the API key.
+            active: Whether the API key is active or not.
+
+        Returns:
+            The updated API key.
+        """
+        api_key = self.get_api_key(
+            name_id_or_prefix=name_id_or_prefix, allow_name_prefix_match=False
+        )
+        update = APIKeyUpdateModel(  # type: ignore[call-arg]
+            name=name, description=description, active=active
+        )
+        return self.zen_store.update_api_key(
+            api_key_id=api_key.id, api_key_update=update
+        )
+
+    def rotate_api_key(
+        self,
+        name_id_or_prefix: Union[UUID, str],
+        retain_period_minutes: int = 0,
+    ) -> APIKeyResponseModel:
+        """Rotate an API key.
+
+        Args:
+            name_id_or_prefix: Name, ID or prefix of the API key to update.
+            retain_period_minutes: The number of minutes to retain the old API
+                key for. If set to 0, the old API key will be invalidated.
+
+        Returns:
+            The updated API key.
+        """
+        api_key = self.get_api_key(
+            name_id_or_prefix=name_id_or_prefix, allow_name_prefix_match=False
+        )
+        rotate_request = APIKeyRotateRequestModel(
+            retain_period_minutes=retain_period_minutes
+        )
+        return self.zen_store.rotate_api_key(
+            api_key_id=api_key.id, rotate_request=rotate_request
+        )
+
+    def delete_api_key(
+        self,
+        name_id_or_prefix: Union[str, UUID],
+    ) -> None:
+        """Delete an API key.
+
+        Args:
+            name_id_or_prefix: The name, ID or prefix of the API key.
+        """
+        api_key = self.get_api_key(
+            name_id_or_prefix=name_id_or_prefix, allow_name_prefix_match=False
+        )
+        self.zen_store.delete_api_key(api_key_id=api_key.id)
 
     # ---- utility prefix matching get functions -----
 

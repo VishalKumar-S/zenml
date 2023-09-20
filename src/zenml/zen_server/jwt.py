@@ -18,7 +18,7 @@ from typing import (
     Any,
     Dict,
     List,
-    Union,
+    Optional,
     cast,
 )
 from uuid import UUID
@@ -38,11 +38,13 @@ class JWTToken(BaseModel):
 
     Attributes:
         user_id: The id of the authenticated User.
+        api_key_id: The id of the API key used to authenticate the user.
         permissions: The permissions scope of the authenticated user.
         claims: The original token claims.
     """
 
-    user_id: Union[UUID, str]
+    user_id: UUID
+    api_key_id: Optional[UUID] = None
     permissions: List[str]
     claims: Dict[str, Any] = {}
 
@@ -92,16 +94,28 @@ class JWTToken(BaseModel):
             raise AuthorizationException(
                 "Invalid JWT token: the subject claim is missing"
             )
-        permissions: List[str] = claims.get("permissions", [])
-
-        user_id: Union[UUID, str] = subject
         try:
             user_id = UUID(subject)
         except ValueError:
-            pass
+            raise AuthorizationException(
+                "Invalid JWT token: the subject claim is not a valid UUID"
+            )
+
+        api_key_id: Optional[UUID] = None
+        if "api_key_id" in claims:
+            try:
+                api_key_id = UUID(claims["api_key_id"])
+            except ValueError:
+                raise AuthorizationException(
+                    "Invalid JWT token: the api_key_id claim is not a valid "
+                    "UUID"
+                )
+
+        permissions: List[str] = claims.get("permissions", [])
 
         return JWTToken(
             user_id=user_id,
+            api_key_id=api_key_id,
             permissions=list(set(permissions)),
             claims=claims,
         )
@@ -132,6 +146,8 @@ class JWTToken(BaseModel):
                 minutes=config.jwt_token_expire_minutes
             )
             claims["exp"] = expire
+        if self.api_key_id:
+            claims["key_api_id"] = str(self.api_key_id)
 
         # Apply custom claims
         claims.update(self.claims)

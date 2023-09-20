@@ -26,6 +26,7 @@ from zenml.zen_stores.schemas.base_schemas import NamedSchema
 
 if TYPE_CHECKING:
     from zenml.zen_stores.schemas import (
+        APIKeySchema,
         ArtifactSchema,
         CodeRepositorySchema,
         FlavorSchema,
@@ -115,6 +116,9 @@ class WorkspaceSchema(NamedSchema, table=True):
     service_connectors: List["ServiceConnectorSchema"] = Relationship(
         back_populates="workspace",
         sa_relationship_kwargs={"cascade": "delete"},
+    )
+    api_keys: List["APIKeySchema"] = Relationship(
+        back_populates="workspace",
     )
 
     @classmethod

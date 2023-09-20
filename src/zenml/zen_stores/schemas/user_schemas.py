@@ -25,6 +25,7 @@ from zenml.zen_stores.schemas.team_schemas import TeamAssignmentSchema
 
 if TYPE_CHECKING:
     from zenml.zen_stores.schemas import (
+        APIKeySchema,
         ArtifactSchema,
         CodeRepositorySchema,
         FlavorSchema,
@@ -91,6 +92,9 @@ class UserSchema(NamedSchema, table=True):
         back_populates="user",
     )
     service_connectors: List["ServiceConnectorSchema"] = Relationship(
+        back_populates="user",
+    )
+    api_keys: List["APIKeySchema"] = Relationship(
         back_populates="user",
     )
 

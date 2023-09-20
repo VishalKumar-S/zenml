@@ -41,8 +41,13 @@ from zenml.constants import (
 from zenml.enums import AuthScheme, PermissionType
 from zenml.exceptions import AuthorizationException
 from zenml.logger import get_logger
-from zenml.models import UserResponseModel
-from zenml.models.user_models import UserAuthModel
+from zenml.models import (
+    APIKey,
+    APIKeyInternalUpdateModel,
+    APIKeyResponseModel,
+    UserAuthModel,
+    UserResponseModel,
+)
 from zenml.zen_server.jwt import JWTToken
 from zenml.zen_server.utils import server_config, zen_store
 from zenml.zen_stores.base_zen_store import DEFAULT_USERNAME
@@ -83,6 +88,7 @@ class AuthContext(BaseModel):
 
     user: UserResponseModel
     access_token: Optional[JWTToken] = None
+    api_key: Optional[APIKeyResponseModel] = None
 
     @property
     def permissions(self) -> Set[PermissionType]:
@@ -106,6 +112,7 @@ class AuthContext(BaseModel):
 def authenticate_credentials(
     user_name_or_id: Optional[Union[str, UUID]] = None,
     password: Optional[str] = None,
+    api_key: Optional[str] = None,
     access_token: Optional[str] = None,
     activation_token: Optional[str] = None,
 ) -> Optional[AuthContext]:
@@ -115,12 +122,14 @@ def authenticate_credentials(
     cover a range of possibilities:
 
      * username+password
+     * API key
      * access token (with embedded user id)
      * username+activation token
 
     Args:
         user_name_or_id: The username or user ID.
         password: The password.
+        api_key: The API key.
         access_token: The access token.
         activation_token: The activation token.
 
@@ -150,6 +159,57 @@ def authenticate_credentials(
     if password is not None:
         if not UserAuthModel.verify_password(password, user):
             return None
+    elif api_key is not None:
+        try:
+            decoded_api_key = APIKey.decode_api_key(api_key)
+        except ValueError:
+            logger.exception("Authentication error: error decoding API key")
+            return None
+
+        try:
+            internal_api_key = zen_store().get_internal_api_key(
+                decoded_api_key.id
+            )
+        except KeyError:
+            logger.error(
+                f"Authentication error: error retrieving API key "
+                f"{decoded_api_key.id}"
+            )
+            return None
+
+        if not internal_api_key.user:
+            logger.error(
+                f"Authentication error: API key {decoded_api_key.id} is not "
+                f"associated with a user"
+            )
+            return None
+
+        if not internal_api_key.user.active:
+            logger.error(
+                f"Authentication error: user {internal_api_key.user.id} "
+                f"associated with API key {decoded_api_key.id} is not active"
+            )
+            return None
+
+        if not internal_api_key.verify_key(decoded_api_key.key):
+            logger.error(
+                f"Authentication error: invalid API key value for API key "
+                f"{decoded_api_key.id}"
+            )
+            return None
+
+        # Update the "last used" timestamp of the API key
+        zen_store().update_internal_api_key(
+            internal_api_key.id,
+            APIKeyInternalUpdateModel(  # type: ignore[call-arg]
+                update_last_used=True
+            ),
+        )
+
+        auth_context = AuthContext(
+            user=internal_api_key.user, api_key=internal_api_key
+        )
+
     elif access_token is not None:
         try:
             decoded_token = JWTToken.decode_token(
