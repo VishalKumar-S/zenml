@@ -88,7 +88,7 @@ class APIKeySchema(NamedSchema, table=True):
             The key hash value.
         """
         context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        return cast(str, context.hash(key))
+        return context.hash(key)
 
     @classmethod
     def from_request(

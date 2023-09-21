@@ -14,7 +14,7 @@
 """Models representing API keys."""
 
 from datetime import datetime, timedelta
-from typing import Optional, Union, cast
+from typing import Optional, Union
 from uuid import UUID
 
 from passlib.context import CryptContext
@@ -143,14 +143,14 @@ class APIKeyInternalResponseModel(APIKeyResponseModel):
         # even when the hashed key is not set, we still want to execute
         # the hash verification to protect against response discrepancy
         # attacks (https://cwe.mitre.org/data/definitions/204.html)
-        key_hash: Optional[str] = None
+        key_hash: str = ""
         context = CryptContext(schemes=["bcrypt"], deprecated="auto")
         if self.key is not None and self.active:
             key_hash = self.key
-        result = cast(bool, context.verify(key, key_hash))
+        result = context.verify(key, key_hash)
 
         # same for the previous key, if set and if it's still valid
-        key_hash = None
+        key_hash = ""
         if (
             self.previous_key is not None
             and self.active
@@ -161,7 +161,7 @@ class APIKeyInternalResponseModel(APIKeyResponseModel):
                 minutes=self.retain_period_minutes
             ):
                 key_hash = self.previous_key
-        previous_result = cast(bool, context.verify(key, key_hash))
+        previous_result = context.verify(key, key_hash)
 
         return result or previous_result
 
