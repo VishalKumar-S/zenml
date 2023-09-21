@@ -136,7 +136,9 @@ def create_api_key(
 def update_api_key(
     api_key_id: UUID,
     api_key_update: APIKeyUpdateModel,
-    _: AuthContext = Security(authorize, scopes=[PermissionType.WRITE]),
+    auth_context: AuthContext = Security(
+        authorize, scopes=[PermissionType.WRITE]
+    ),
 ) -> APIKeyResponseModel:
     """Updates an API key.
 
@@ -145,10 +147,19 @@ def update_api_key(
     Args:
         api_key_id: ID of the API key to update.
         api_key_update: API key update.
+        auth_context: Authentication context.
 
     Returns:
         The updated API key.
     """
+    api_key = zen_store().get_api_key(api_key_id)
+
+    if not api_key.user or api_key.user.id != auth_context.user.id:
+        raise IllegalOperationError(
+            "Updating API keys for a user other than yourself "
+            "is not supported."
+        )
+
     return zen_store().update_api_key(
         api_key_id=api_key_id, api_key_update=api_key_update
     )
@@ -163,7 +174,9 @@ def update_api_key(
 def rotate_api_key(
     api_key_id: UUID,
     rotate_request: APIKeyRotateRequestModel,
-    _: AuthContext = Security(authorize, scopes=[PermissionType.WRITE]),
+    auth_context: AuthContext = Security(
+        authorize, scopes=[PermissionType.WRITE]
+    ),
 ) -> APIKeyResponseModel:
     """Rotate an API key.
 
@@ -172,10 +185,19 @@ def rotate_api_key(
     Args:
         api_key_id: ID of the API key to rotate.
         rotate_request: API key rotation request.
+        auth_context: Authentication context.
 
     Returns:
         The updated API key.
     """
+    api_key = zen_store().get_api_key(api_key_id)
+
+    if not api_key.user or api_key.user.id != auth_context.user.id:
+        raise IllegalOperationError(
+            "Rotating API keys for a user other than yourself "
+            "is not supported."
+        )
+
     return zen_store().rotate_api_key(
         api_key_id=api_key_id, rotate_request=rotate_request
     )
