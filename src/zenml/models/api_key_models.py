@@ -14,7 +14,7 @@
 """Models representing API keys."""
 
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Optional, Union, cast
+from typing import Optional, Union, cast
 from uuid import UUID
 
 from passlib.context import CryptContext
@@ -28,10 +28,6 @@ from zenml.models.base_models import (
 from zenml.models.constants import STR_FIELD_MAX_LENGTH
 from zenml.models.filter_models import WorkspaceScopedFilterModel
 from zenml.utils.string_utils import b64_decode, b64_encode
-
-if TYPE_CHECKING:
-    from zenml.models import UserResponseModel, WorkspaceResponseModel
-
 
 # ---- #
 # BASE #
