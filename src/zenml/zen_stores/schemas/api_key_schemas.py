@@ -216,6 +216,9 @@ class APIKeySchema(NamedSchema, table=True):
     ) -> Tuple["APIKeySchema", str]:
         """Rotate the key for an `APIKeySchema`.
 
+        Args:
+            rotate_request: The rotate request model.
+
         Returns:
             The updated `APIKeySchema` and the new un-hashed key.
         """

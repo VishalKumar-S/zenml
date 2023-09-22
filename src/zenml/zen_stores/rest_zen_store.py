@@ -2383,9 +2383,6 @@ class RestZenStore(BaseZenStore):
 
         Returns:
             The updated API key.
-
-        Raises:
-            KeyError: if the API key doesn't exist.
         """
         response_body = self.put(
             f"{API_KEYS}/{str(api_key_id)}{API_KEY_ROTATE}",
