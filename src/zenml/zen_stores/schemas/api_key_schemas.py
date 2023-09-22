@@ -15,7 +15,7 @@
 
 from datetime import datetime
 from secrets import token_hex
-from typing import Optional, Tuple, cast
+from typing import Optional, Tuple
 from uuid import UUID
 
 from passlib.context import CryptContext
