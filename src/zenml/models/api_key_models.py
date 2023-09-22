@@ -44,6 +44,9 @@ class APIKey(BaseModel):
     def decode_api_key(cls, encoded_key: str) -> "APIKey":
         """Decodes an API key from a base64 string.
 
+        Args:
+            encoded_key: The encoded API key.
+
         Returns:
             The decoded API key.
 
