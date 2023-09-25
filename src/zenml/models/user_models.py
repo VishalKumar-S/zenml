@@ -225,7 +225,7 @@ class UserAuthModel(UserBaseModel, BaseResponseModel):
         if user is not None and user.password is not None:  # and user.active:
             password_hash = user.get_hashed_password()
         pwd_context = cls._get_crypt_context()
-        return pwd_context.verify(plain_password, password_hash)
+        return pwd_context.verify(plain_password, password_hash)  # type: ignore[arg-type]
 
     @classmethod
     def verify_activation_token(

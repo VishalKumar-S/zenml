@@ -150,7 +150,7 @@ class APIKeyInternalResponseModel(APIKeyResponseModel):
         context = CryptContext(schemes=["bcrypt"], deprecated="auto")
         if self.key is not None and self.active:
             key_hash = self.key
-        result = context.verify(key, key_hash)
+        result = context.verify(key, key_hash)  # type: ignore[arg-type]
 
         # same for the previous key, if set and if it's still valid
         key_hash = None
@@ -164,7 +164,7 @@ class APIKeyInternalResponseModel(APIKeyResponseModel):
                 minutes=self.retain_period_minutes
             ):
                 key_hash = self.previous_key
-        previous_result = context.verify(key, key_hash)
+        previous_result = context.verify(key, key_hash)  # type: ignore[arg-type]
 
         return result or previous_result
 
