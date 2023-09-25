@@ -4974,12 +4974,14 @@ class Client(metaclass=ClientMetaClass):
         self,
         name: str,
         description: str = "",
+        set: bool = False,
     ) -> APIKeyResponseModel:
-        """Create a new API key.
+        """Create a new API key and optionally set it as the active API key.
 
         Args:
             name: Name of the API key.
             description: The description of the API key.
+            set: Whether to set the created API key as the active API key.
 
         Returns:
             The created API key.
@@ -4990,7 +4992,30 @@ class Client(metaclass=ClientMetaClass):
             user=self.active_user.id,
             workspace=self.active_workspace.id,
         )
-        return self.zen_store.create_api_key(api_key=request)
+        api_key = self.zen_store.create_api_key(api_key=request)
+        assert api_key.key is not None
+
+        if set:
+            self.set_api_key(key=api_key.key)
+
+        return api_key
+
+    def set_api_key(self, key: str) -> None:
+        """Configure the client with an API key.
+
+        Args:
+            key: The API key to use.
+        """
+        from zenml.zen_stores.rest_zen_store import RestZenStore
+
+        zen_store = self.zen_store
+        if not zen_store.TYPE == StoreType.REST:
+            raise NotImplementedError(
+                "API key configuration is only supported if connected to a "
+                "ZenML server."
+            )
+        assert isinstance(zen_store, RestZenStore)
+        zen_store.set_api_key(api_key=key)
 
     def list_api_keys(
         self,
@@ -5099,6 +5124,7 @@ class Client(metaclass=ClientMetaClass):
         self,
         name_id_or_prefix: Union[UUID, str],
         retain_period_minutes: int = 0,
+        set: bool = False,
     ) -> APIKeyResponseModel:
         """Rotate an API key.
 
@@ -5106,6 +5132,7 @@ class Client(metaclass=ClientMetaClass):
             name_id_or_prefix: Name, ID or prefix of the API key to update.
             retain_period_minutes: The number of minutes to retain the old API
                 key for. If set to 0, the old API key will be invalidated.
+            set: Whether to set the rotated API key as the active API key.
 
         Returns:
             The updated API key.
@@ -5116,9 +5143,14 @@ class Client(metaclass=ClientMetaClass):
         rotate_request = APIKeyRotateRequestModel(
             retain_period_minutes=retain_period_minutes
         )
-        return self.zen_store.rotate_api_key(
+        new_key = self.zen_store.rotate_api_key(
             api_key_id=api_key.id, rotate_request=rotate_request
         )
+        assert new_key.key is not None
+        if set:
+            self.set_api_key(key=new_key.key)
+
+        return new_key
 
     def delete_api_key(
         self,

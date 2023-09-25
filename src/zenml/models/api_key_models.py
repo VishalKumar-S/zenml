@@ -146,14 +146,14 @@ class APIKeyInternalResponseModel(APIKeyResponseModel):
         # even when the hashed key is not set, we still want to execute
         # the hash verification to protect against response discrepancy
         # attacks (https://cwe.mitre.org/data/definitions/204.html)
-        key_hash: str = ""
+        key_hash: Optional[str] = None
         context = CryptContext(schemes=["bcrypt"], deprecated="auto")
         if self.key is not None and self.active:
             key_hash = self.key
         result = context.verify(key, key_hash)
 
         # same for the previous key, if set and if it's still valid
-        key_hash = ""
+        key_hash = None
         if (
             self.previous_key is not None
             and self.active

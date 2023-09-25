@@ -2335,6 +2335,15 @@ class RestZenStore(BaseZenStore):
             response_model=APIKeyResponseModel,
         )
 
+    def set_api_key(self, api_key: str) -> None:
+        """Set the API key to use for authentication.
+
+        Args:
+            api_key: The API key to use for authentication.
+        """
+        self.config.api_key = api_key
+        self.clear_session()
+
     def list_api_keys(
         self, filter_model: APIKeyFilterModel
     ) -> Page[APIKeyResponseModel]:
