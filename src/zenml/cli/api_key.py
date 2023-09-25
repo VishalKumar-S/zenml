@@ -105,7 +105,7 @@ def create_api_key(
 
 @api_key.command("describe", help="Describe an API key.")
 @click.argument("name_or_id", type=str, required=True)
-def get_api_key(name_or_id: str) -> None:
+def describe_api_key(name_or_id: str) -> None:
     """Describe an API key.
 
     Args:
