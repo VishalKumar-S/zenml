@@ -20,6 +20,7 @@ from uuid import UUID
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field
 
+from zenml.constants import ZENML_API_KEY_PREFIX
 from zenml.models.base_models import (
     WorkspaceScopedRequestModel,
     WorkspaceScopedResponseModel,
@@ -53,6 +54,8 @@ class APIKey(BaseModel):
         Raises:
             ValueError: If the key is not valid.
         """
+        if encoded_key.startswith(ZENML_API_KEY_PREFIX):
+            encoded_key = encoded_key[len(ZENML_API_KEY_PREFIX) :]
         try:
             json_key = b64_decode(encoded_key)
             return cls.parse_raw(json_key)
@@ -60,12 +63,13 @@ class APIKey(BaseModel):
             raise ValueError("Invalid API key.")
 
     def encode(self) -> str:
-        """Encodes the API key in a base64 string that includes the key ID.
+        """Encodes the API key in a base64 string that includes the key ID and prefix.
 
         Returns:
             The encoded API key.
         """
-        return b64_encode(self.json())
+        encoded_key = b64_encode(self.json())
+        return f"{ZENML_API_KEY_PREFIX}{encoded_key}"
 
 
 class APIKeyBaseModel(BaseModel):

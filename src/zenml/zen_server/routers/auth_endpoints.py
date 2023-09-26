@@ -30,7 +30,7 @@ from zenml.constants import (
     LOGOUT,
     VERSION_1,
 )
-from zenml.enums import AuthScheme
+from zenml.enums import AuthScheme, OAuthGrantTypes
 from zenml.logger import get_logger
 from zenml.models import UserRoleAssignmentFilterModel
 from zenml.models.user_models import UserRequestModel, UserUpdateModel
@@ -51,23 +51,27 @@ router = APIRouter(
 )
 
 
-class APIKeyPasswordRequestForm:
-    """OAuth2 password grant type request form.
+class OAuth2LoginRequestForm:
+    """Generic OAuth2 grant type request form.
 
-    This form is similar to `fastapi.security.OAuth2PasswordRequestForm`, with
-    the difference being that it also allows an empty username and
-    password and supports passing an API key.
+    This form allows multiple grant types to be used with the same endpoint:
+
+    * standard OAuth2 password grant type
+    * standard  OAuth2 device code grant type
+    * ZenML API key grant type (a form of OAuth2 password grant type with no
+    username and an API key instead of a password)
+    * ZenML External Authenticator grant type
     """
 
     def __init__(
         self,
-        grant_type: str = Form(None, regex="password"),
+        grant_type: Optional[str] = Form(None),
         username: Optional[str] = Form(None),
         password: Optional[str] = Form(None),
-        api_key: Optional[str] = Form(None),
         scope: str = Form(""),
         client_id: Optional[str] = Form(None),
         client_secret: Optional[str] = Form(None),
+        device_code: Optional[str] = Form(None),
     ):
         """Initializes the form.
 
@@ -79,20 +83,55 @@ class APIKeyPasswordRequestForm:
             scope: The scope.
             client_id: The client ID.
             client_secret: The client secret.
+            device_code: The device code.
         """
-        self.grant_type = grant_type
+        if not grant_type:
+            # Detect the grant type from the form data
+            if username is not None:
+                self.grant_type = OAuthGrantTypes.OAUTH_PASSWORD
+            elif password:
+                self.grant_type = OAuthGrantTypes.ZENML_API_KEY
+            elif device_code:
+                self.grant_type = OAuthGrantTypes.OAUTH_DEVICE_CODE
+            else:
+                self.grant_type = OAuthGrantTypes.ZENML_EXTERNAL
+        else:
+            if grant_type not in OAuthGrantTypes.values():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid grant type: {grant_type}",
+                )
+            self.grant_type = OAuthGrantTypes(grant_type)
+
+        if self.grant_type == OAuthGrantTypes.OAUTH_PASSWORD:
+            if not username:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username is required.",
+                )
+        elif self.grant_type == OAuthGrantTypes.ZENML_API_KEY:
+            if not password:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="API key is required.",
+                )
+        elif self.grant_type == OAuthGrantTypes.OAUTH_DEVICE_CODE:
+            if not device_code:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Device code is required.",
+                )
+
         self.username = username
         self.password = password
-        self.api_key = api_key
         self.scope = scope
         self.client_id = client_id
         self.client_secret = client_secret
-        self.grant_type = grant_type
         self.username = username
-        self.password = password
         self.scopes = scope.split()
         self.client_id = client_id
         self.client_secret = client_secret
+        self.device_code = device_code
 
 
 class AuthenticationResponse(BaseModel):
@@ -170,7 +209,7 @@ if server_config().auth_scheme == AuthScheme.OAUTH2_PASSWORD_BEARER:
     )
     def token(
         response: Response,
-        auth_form_data: APIKeyPasswordRequestForm = Depends(),
+        auth_form_data: OAuth2LoginRequestForm = Depends(),
     ) -> AuthenticationResponse:
         """Returns an access token for the given user.
 
@@ -184,11 +223,21 @@ if server_config().auth_scheme == AuthScheme.OAUTH2_PASSWORD_BEARER:
         Raises:
             HTTPException: 401 if not authorized to login.
         """
-        auth_context = authenticate_credentials(
-            user_name_or_id=auth_form_data.username,
-            password=auth_form_data.password,
-            api_key=auth_form_data.api_key,
-        )
+        if auth_form_data.grant_type == OAuthGrantTypes.OAUTH_PASSWORD:
+            auth_context = authenticate_credentials(
+                user_name_or_id=auth_form_data.username,
+                password=auth_form_data.password,
+            )
+        elif auth_form_data.grant_type == OAuthGrantTypes.ZENML_API_KEY:
+            auth_context = authenticate_credentials(
+                api_key=auth_form_data.password,
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid grant type.",
+            )
+
         if not auth_context:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -226,7 +275,7 @@ elif server_config().auth_scheme == AuthScheme.EXTERNAL:
     def login(
         request: Request,
         response: Response,
-        auth_form_data: APIKeyPasswordRequestForm = Depends(),
+        auth_form_data: OAuth2LoginRequestForm = Depends(),
     ) -> AuthenticationResponse:
         """Authorize a user through the external authenticator service.
 
@@ -242,9 +291,9 @@ elif server_config().auth_scheme == AuthScheme.EXTERNAL:
         Raises:
             HTTPException: 401 if not authorized to login.
         """
-        if auth_form_data.api_key:
+        if auth_form_data.grant_type == OAuthGrantTypes.ZENML_API_KEY:
             auth_context = authenticate_credentials(
-                api_key=auth_form_data.api_key,
+                api_key=auth_form_data.password,
             )
             if not auth_context:
                 raise HTTPException(
@@ -258,6 +307,11 @@ elif server_config().auth_scheme == AuthScheme.EXTERNAL:
                 if auth_context.api_key
                 else None,
                 response=response,
+            )
+        elif auth_form_data.grant_type != OAuthGrantTypes.ZENML_EXTERNAL:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid grant type.",
             )
 
         config = server_config()

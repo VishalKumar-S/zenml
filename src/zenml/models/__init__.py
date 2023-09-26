@@ -131,6 +131,8 @@ from zenml.models.team_role_assignment_models import (
     TeamRoleAssignmentResponseModel,
 )
 from zenml.models.user_models import (
+    ServiceAccountRequestModel,
+    ServiceAccountUpdateModel,
     UserAuthModel,
     UserFilterModel,
     UserRequestModel,

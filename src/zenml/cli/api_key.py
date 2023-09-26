@@ -89,7 +89,8 @@ def create_api_key(
             "API key?"
         )
 
-    if set:
+    if set and api_key.key:
+        client.set_api_key(api_key.key)
         cli_utils.declare(
             "The local client has been configured with the new API key."
         )
@@ -212,10 +213,9 @@ def rotate_api_key(
             after it has been rotated.
         set: Configure the local client with the newly generated key.
     """
+    client = Client()
     try:
-        api_key = Client().rotate_api_key(
-            name_id_or_prefix=name_or_id, set=set
-        )
+        api_key = client.rotate_api_key(name_id_or_prefix=name_or_id, set=set)
     except KeyError as e:
         cli_utils.error(str(e))
 
@@ -231,7 +231,8 @@ def rotate_api_key(
             "generated API key?"
         )
 
-    if set:
+    if set and api_key.key:
+        client.set_api_key(api_key.key)
         cli_utils.declare(
             "The local client has been configured with the new API key."
         )

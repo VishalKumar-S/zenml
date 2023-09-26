@@ -73,7 +73,7 @@ from zenml.constants import (
     VERSION_1,
     WORKSPACES,
 )
-from zenml.enums import SecretsStoreType, StoreType
+from zenml.enums import OAuthGrantTypes, SecretsStoreType, StoreType
 from zenml.exceptions import (
     AuthorizationException,
 )
@@ -2343,6 +2343,7 @@ class RestZenStore(BaseZenStore):
         """
         self.config.api_key = api_key
         self.clear_session()
+        GlobalConfiguration()._write_config()
 
     def list_api_keys(
         self, filter_model: APIKeyFilterModel
@@ -2437,12 +2438,14 @@ class RestZenStore(BaseZenStore):
                     and self.config.password is not None
                 ):
                     data = {
+                        "grant_type": OAuthGrantTypes.OAUTH_PASSWORD.value,
                         "username": self.config.username,
                         "password": self.config.password,
                     }
                 elif self.config.api_key is not None:
                     data = {
-                        "api_key": self.config.api_key,
+                        "grant_type": OAuthGrantTypes.ZENML_API_KEY.value,
+                        "password": self.config.api_key,
                     }
 
                 response = self._handle_response(

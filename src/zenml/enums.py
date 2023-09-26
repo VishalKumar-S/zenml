@@ -203,6 +203,15 @@ class AuthScheme(StrEnum):
     EXTERNAL = "EXTERNAL"
 
 
+class OAuthGrantTypes(StrEnum):
+    """The OAuth grant types."""
+
+    OAUTH_PASSWORD = "password"
+    OAUTH_DEVICE_CODE = "urn:ietf:params:oauth:grant-type:device_code"
+    ZENML_API_KEY = "zenml:api_key"
+    ZENML_EXTERNAL = "zenml:external"
+
+
 class GenericFilterOps(StrEnum):
     """Ops for all filters for string values on list methods."""
 
